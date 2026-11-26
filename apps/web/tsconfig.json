@@ -40,6 +40,7 @@
     "../../scripts/lib/public-config.ts",
     "../../scripts/lib/tagged-source-version.ts",
     "../../scripts/lib/third-party-licenses.ts",
-    "../../packages/shared/src/fleetTopology.ts"
+    "../../packages/shared/src/fleetTopology.ts",
+    "../desktop/src/app/DesktopAppActivationBroker.ts"
   ]
 }

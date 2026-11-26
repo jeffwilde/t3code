@@ -240,6 +240,46 @@ const registerSwitchedOffEnvironment = Effect.gen(function* () {
 });
 
 describe("connection onboarding", () => {
+  it.effect(
+    "pairs an approved synthetic target without replacing an unrelated saved environment",
+    () => {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      return Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const onboarding = yield* Onboarding.ConnectionOnboarding;
+        const other = EnvironmentId.make("existing-environment");
+        const profile = new BearerConnectionProfile({
+          connectionId: "existing-connection",
+          environmentId: other,
+          label: "Existing",
+          httpBaseUrl: "https://existing.example/",
+          wsBaseUrl: "wss://existing.example/",
+        });
+        const target = new BearerConnectionTarget({
+          environmentId: other,
+          connectionId: profile.connectionId,
+          label: profile.label,
+        });
+        yield* registry.register(
+          new BearerConnectionRegistration({
+            target,
+            profile,
+            credential: new BearerConnectionCredential({ token: "synthetic-existing" }),
+          }),
+        );
+        const before = (yield* SubscriptionRef.get(registry.entries)).get(other);
+        const id = yield* onboarding.registerPairing({
+          ...PAIRING_INPUT,
+          expectedEnvironmentId: PAIRED_ENVIRONMENT_ID,
+        });
+        const after = yield* SubscriptionRef.get(registry.entries);
+        expect(id).toBe(PAIRED_ENVIRONMENT_ID);
+        expect(after.get(other)).toEqual(before);
+        expect(after.has(PAIRED_ENVIRONMENT_ID)).toBe(true);
+        expect(calls.filter((call) => call.url.endsWith("/oauth/token"))).toHaveLength(1);
+      }).pipe(Effect.provide(layerPairingOnboarding(undefined, calls)));
+    },
+  );
   it.effect("prepares a persisted bearer registration from pairing details", () =>
     Effect.gen(function* () {
       const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
