@@ -1346,6 +1346,16 @@ const make = Effect.gen(function* () {
 
   const linkState = Effect.fn("environment.cloud.linkState")(
     function* () {
+      if (fleetPrivateBuild)
+        return {
+          linked: false,
+          cloudUserId: null,
+          relayUrl: null,
+          relayIssuer: null,
+          managedTunnelActive: false,
+          publishAgentActivity: false,
+          holdWebhooksWhileOffline: false,
+        } satisfies EnvironmentCloudLinkStateResult;
       return yield* readCloudLinkState();
     },
     Effect.catchIf(ServerSecretStore.isSecretStoreError, internalError("read-relay-config")),

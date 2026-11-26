@@ -26,3 +26,21 @@ it("rejects inherited relay and OAuth config in a fleet build", async () => {
       ._tag,
   ).toBe("Failure");
 });
+
+it("does not advertise activity publishing from preserved credentials in a fleet build", async () => {
+  vi.stubGlobal("__T3CODE_FLEET_PRIVATE__", true);
+  vi.resetModules();
+  const config = await import("./config.ts");
+  let reads = 0;
+  const secrets = {
+    get: () => {
+      reads += 1;
+      throw new Error("must not read secrets");
+    },
+  };
+  const result = await Effect.runPromise(
+    config.readAgentActivityPublishingActive(secrets as never),
+  );
+  expect(result).toBe(false);
+  expect(reads).toBe(0);
+});
