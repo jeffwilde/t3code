@@ -443,6 +443,10 @@
       "types": "./src/usageLimits.ts",
       "import": "./src/usageLimits.ts"
     },
+    "./fleetTopology": {
+      "types": "./src/fleetTopology.ts",
+      "import": "./src/fleetTopology.ts"
+    },
     "./desktopAppControl": {
       "types": "./src/desktopAppControl.ts",
       "import": "./src/desktopAppControl.ts"

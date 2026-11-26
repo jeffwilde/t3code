@@ -1242,7 +1242,9 @@ export interface DesktopBridge {
     onOpen: (listener: (url: string) => void) => () => void;
   };
   appActivation: {
-    setReady: (ready: boolean) => Promise<void>;
+    setReady: (
+      ready: boolean | { readonly ready: boolean; readonly workspaceReady: boolean },
+    ) => Promise<void>;
     complete: (response: DesktopAppActivationResponse) => Promise<void>;
     onRequest: (listener: (request: DesktopAppActivationRequest) => void) => () => void;
   };

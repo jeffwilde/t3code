@@ -16,6 +16,7 @@ import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
 import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
+import { parseFleetTargets } from "../../packages/shared/src/fleetTopology.ts";
 import { resolveTaggedSourceVersion } from "../../scripts/lib/tagged-source-version";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
 import { tailwindPlugins } from "./vite/tailwind";
@@ -35,6 +36,9 @@ const configuredWsUrl = isSingleOriginDev ? undefined : process.env.VITE_WS_URL?
 const configuredHttpUrl = isSingleOriginDev ? undefined : process.env.VITE_HTTP_URL?.trim();
 // Fleet builds opt out after loading repoEnv, so .env cannot restore cloud settings.
 const fleetNoCloud = process.env.T3CODE_FLEET_NO_CLOUD === "1";
+const fleetTargets = fleetNoCloud ? (process.env.T3CODE_FLEET_TARGETS_JSON ?? "[]") : "[]";
+if (parseFleetTargets(fleetTargets) === null)
+  throw new Error("Invalid non-secret fleet target policy");
 const configuredRelayUrl = fleetNoCloud ? "" : repoEnv.VITE_T3CODE_RELAY_URL?.trim() || "";
 const configuredClerkPublishableKey = fleetNoCloud
   ? ""
@@ -371,6 +375,7 @@ export default defineConfig(({ command }) => {
       ],
     },
     define: {
+      __T3CODE_FLEET_TARGETS__: JSON.stringify(fleetTargets),
       "import.meta.env.VITE_WS_URL": JSON.stringify(configuredWsUrl ?? ""),
       // Override .env URLs with empty values in single-origin dev so clients use window.location.origin.
       "import.meta.env.VITE_HTTP_URL": JSON.stringify(configuredHttpUrl ?? ""),

@@ -1,19 +1,32 @@
 import * as Schema from "effect/Schema";
 
-import { ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { EnvironmentId, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const DESKTOP_APP_ACTIVATION_PROTOCOL_VERSION = 1 as const;
 
 export const DesktopAppActivationPlatform = Schema.Literals(["darwin", "linux", "win32"]);
 export type DesktopAppActivationPlatform = typeof DesktopAppActivationPlatform.Type;
 
-export const DesktopAppActivationRequest = Schema.Struct({
+export const DesktopOpenWorkspaceRequest = Schema.Struct({
   version: Schema.Literal(DESKTOP_APP_ACTIVATION_PROTOCOL_VERSION),
   requestId: TrimmedNonEmptyString,
   type: Schema.Literal("open-workspace"),
   workspaceRoot: TrimmedNonEmptyString,
   platform: DesktopAppActivationPlatform,
 });
+export type DesktopOpenWorkspaceRequest = typeof DesktopOpenWorkspaceRequest.Type;
+export const DesktopFleetPairRequest = Schema.Struct({
+  version: Schema.Literal(DESKTOP_APP_ACTIVATION_PROTOCOL_VERSION),
+  requestId: TrimmedNonEmptyString,
+  type: Schema.Literal("fleet-pair"),
+  environmentId: EnvironmentId,
+  origin: TrimmedNonEmptyString,
+  pairingCode: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export const DesktopAppActivationRequest = Schema.Union([
+  DesktopOpenWorkspaceRequest,
+  DesktopFleetPairRequest,
+]);
 export type DesktopAppActivationRequest = typeof DesktopAppActivationRequest.Type;
 
 export const DesktopAppActivationErrorCode = Schema.Literals([
@@ -48,6 +61,13 @@ export type DesktopAppActivationFailure = typeof DesktopAppActivationFailure.Typ
 
 export const DesktopAppActivationResponse = Schema.Union([
   DesktopAppActivationSuccess,
+  Schema.Struct({
+    version: Schema.Literal(DESKTOP_APP_ACTIVATION_PROTOCOL_VERSION),
+    requestId: TrimmedNonEmptyString,
+    ok: Schema.Literal(true),
+    environmentId: EnvironmentId,
+    result: Schema.Literals(["absent", "saved", "paired"]),
+  }),
   DesktopAppActivationFailure,
 ]);
 export type DesktopAppActivationResponse = typeof DesktopAppActivationResponse.Type;

@@ -6,8 +6,15 @@ import { Rolldown } from "vite-plus/pack";
 
 import { isDesktopRuntimeExternalDependency } from "../../scripts/lib/desktop-external-packages.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
+import { parseFleetTargets } from "../../packages/shared/src/fleetTopology.ts";
 
 const repoEnv = loadRepoEnv();
+const fleetTargets =
+  process.env.T3CODE_FLEET_NO_CLOUD === "1"
+    ? (process.env.T3CODE_FLEET_TARGETS_JSON ?? "[]")
+    : "[]";
+if (parseFleetTargets(fleetTargets) === null)
+  throw new Error("Invalid non-secret fleet target policy");
 const domTests = ["src/preview/PickPreload.test.ts"];
 
 // Install only bundle externals; the server bundle already carries its dependency tree.
@@ -22,6 +29,7 @@ const devElectronCommand =
     ? "node scripts/dev-electron.mjs"
     : "exec node scripts/dev-electron.mjs";
 const publicConfigDefine = {
+  __T3CODE_FLEET_TARGETS__: JSON.stringify(fleetTargets),
   __T3CODE_FLEET_PRIVATE__: JSON.stringify(process.env.T3CODE_FLEET_NO_CLOUD === "1"),
   __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
     repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",

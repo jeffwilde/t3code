@@ -13,6 +13,8 @@ import {
   type DesktopAppActivationResponse,
 } from "@t3tools/contracts";
 import { resolveDesktopAppControlAddress } from "@t3tools/shared/desktopAppControl";
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
+import { permitsFleetTarget } from "@t3tools/shared/fleetTopology";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -159,6 +161,22 @@ export async function startDesktopAppControlServer(input: {
         );
         return;
       }
+      if (parsed.type === "fleet-pair" && !fleetPrivateBuild) {
+        finish(invalidResponse(parsed.requestId, "Fleet pairing is unavailable in this build."));
+        return;
+      }
+      if (
+        parsed.type === "fleet-pair" &&
+        !permitsFleetTarget(parsed.environmentId, parsed.origin)
+      ) {
+        finish(invalidResponse(parsed.requestId, "The fleet target is not authorized."));
+        return;
+      }
+      // Do not redeem credentials until an authenticated topology policy binds this target.
+      if (parsed.type === "fleet-pair" && parsed.pairingCode !== undefined) {
+        finish(invalidResponse(parsed.requestId, "Fleet pairing authorization is not configured."));
+        return;
+      }
       activeRequestId = parsed.requestId;
       void input.handle(parsed).then(finish, () => {
         finish(
@@ -287,7 +305,7 @@ export class DesktopAppActivation extends Context.Service<
   DesktopAppActivation,
   {
     readonly start: Effect.Effect<void, DesktopAppActivationStartError, Scope.Scope>;
-    readonly setRendererReady: (ready: boolean) => Effect.Effect<void>;
+    readonly setRendererReady: (ready: boolean, workspaceReady?: boolean) => Effect.Effect<void>;
     readonly complete: (response: DesktopAppActivationResponse) => Effect.Effect<void>;
   }
 >()("@t3tools/desktop/app/DesktopAppActivation") {}
@@ -354,7 +372,10 @@ export const make = Effect.gen(function* () {
           Effect.ensuring(Effect.sync(() => broker.close())),
         ),
     ).pipe(Effect.asVoid),
-    setRendererReady: Effect.fn("DesktopAppActivation.setRendererReady")(function* (ready) {
+    setRendererReady: Effect.fn("DesktopAppActivation.setRendererReady")(function* (
+      ready,
+      workspaceReady = ready,
+    ) {
       if (!ready) {
         clearRegisteredRenderer();
         return;
@@ -383,7 +404,7 @@ export const make = Effect.gen(function* () {
 
       broker.registerRenderer((request) => {
         webContents.send(DESKTOP_APP_ACTIVATION_REQUEST_CHANNEL, request);
-      });
+      }, workspaceReady);
     }),
     // The IPC handler owns the activation-completion span.
     complete: Effect.fnUntraced(function* (response) {

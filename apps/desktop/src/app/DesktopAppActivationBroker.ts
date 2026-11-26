@@ -34,6 +34,7 @@ export class DesktopAppActivationBroker {
   readonly #requestTimeoutMs: number;
   readonly #activate: () => void;
   #renderer: RendererSender | null = null;
+  #workspaceReady = false;
   #closed = false;
 
   constructor(input: { readonly requestTimeoutMs: number; readonly activate: () => void }) {
@@ -71,13 +72,14 @@ export class DesktopAppActivationBroker {
       });
     });
 
-    this.#activate();
+    if (request.type === "open-workspace") this.#activate();
     this.#flush();
     return response;
   }
 
-  registerRenderer(send: RendererSender): void {
+  registerRenderer(send: RendererSender, workspaceReady = true): void {
     this.#renderer = send;
+    this.#workspaceReady = workspaceReady;
     this.#flush();
   }
 
@@ -123,6 +125,7 @@ export class DesktopAppActivationBroker {
 
     for (const pending of this.#pending.values()) {
       if (pending.dispatched) continue;
+      if (pending.request.type === "open-workspace" && !this.#workspaceReady) continue;
       try {
         pending.dispatched = true;
         renderer(pending.request);

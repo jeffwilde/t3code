@@ -5,6 +5,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import {
+  EnvironmentId,
   ProjectId,
   ThreadId,
   type DesktopAppActivationRequest,
@@ -81,6 +82,39 @@ function exchange(address: string, payload: DesktopAppActivationRequest) {
 }
 
 describe("desktop app control server", () => {
+  it.effect("rejects fleet requests in ordinary builds without forwarding the pairing code", () =>
+    Effect.gen(function* () {
+      const platform = yield* HostProcess.Platform;
+      const userId = yield* HostProcess.UserId;
+      yield* Effect.promise(async () => {
+        const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-fleet-reject-"));
+        const target = makeTarget(NodePath.join(root, "userdata"), platform, userId);
+        let forwarded = false;
+        const server = await startDesktopAppControlServer({
+          ...target,
+          userId,
+          handle: async () => {
+            forwarded = true;
+            throw new Error("unexpected");
+          },
+          cancel: () => undefined,
+          onReclaimError: () => undefined,
+        });
+        openServers.push(server);
+        const response = await exchange(target.address, {
+          version: 1,
+          requestId: "fleet-reject",
+          type: "fleet-pair",
+          environmentId: EnvironmentId.make("env"),
+          origin: "https://host.example",
+          pairingCode: "synthetic-secret",
+        });
+        expect(response.ok).toBe(false);
+        expect(JSON.stringify(response)).not.toContain("synthetic-secret");
+        expect(forwarded).toBe(false);
+      });
+    }),
+  );
   it.effect("cancels a queued request when the client disconnects", () =>
     Effect.gen(function* () {
       const platform = yield* HostProcess.Platform;
