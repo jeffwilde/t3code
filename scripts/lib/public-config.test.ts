@@ -15,6 +15,30 @@ afterEach(() => {
 });
 
 describe("loadRepoEnv", () => {
+  it("clears cloud aliases after process and env file resolution in fleet builds", () => {
+    const repoRoot = makeTemporaryDirectory();
+    NodeFS.writeFileSync(
+      NodePath.join(repoRoot, ".env"),
+      "T3CODE_RELAY_URL=https://root.example.test\nT3CODE_CLERK_JWT_TEMPLATE=root\n",
+    );
+    const result = loadRepoEnv({
+      repoRoot,
+      baseEnv: {
+        T3CODE_FLEET_NO_CLOUD: "1",
+        VITE_CLERK_PUBLISHABLE_KEY: "pk_test",
+        VITE_RELAY_OTLP_TRACES_TOKEN: "sentinel",
+      },
+    });
+    expect(result).toMatchObject({
+      T3CODE_RELAY_URL: "",
+      VITE_T3CODE_RELAY_URL: "",
+      T3CODE_CLERK_JWT_TEMPLATE: "",
+      VITE_CLERK_PUBLISHABLE_KEY: "",
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: "",
+      VITE_RELAY_OTLP_TRACES_TOKEN: "",
+      T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN: "",
+    });
+  });
   it("applies process, root local, and root precedence in that order", () => {
     const repoRoot = makeTemporaryDirectory();
     NodeFS.writeFileSync(

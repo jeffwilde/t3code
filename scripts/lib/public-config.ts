@@ -98,6 +98,35 @@ export function loadRepoEnv({
           VITE_RELAY_OTLP_TRACES_TOKEN: config.relayClientOtlpTracesToken,
         }
       : {}),
+    // Fleet builds disable upstream cloud configuration after all env-file aliases.
+    ...(baseEnv.T3CODE_FLEET_NO_CLOUD === "1"
+      ? Object.fromEntries(
+          [
+            "T3CODE_CLERK_PUBLISHABLE_KEY",
+            "VITE_CLERK_PUBLISHABLE_KEY",
+            "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY",
+            "T3CODE_CLERK_JWT_TEMPLATE",
+            "VITE_CLERK_JWT_TEMPLATE",
+            "EXPO_PUBLIC_CLERK_JWT_TEMPLATE",
+            "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID",
+            "VITE_CLERK_CLI_OAUTH_CLIENT_ID",
+            "T3CODE_RELAY_URL",
+            "VITE_T3CODE_RELAY_URL",
+            "T3CODE_MOBILE_OTLP_TRACES_URL",
+            "EXPO_PUBLIC_OTLP_TRACES_URL",
+            "T3CODE_MOBILE_OTLP_TRACES_DATASET",
+            "EXPO_PUBLIC_OTLP_TRACES_DATASET",
+            "T3CODE_MOBILE_OTLP_TRACES_TOKEN",
+            "EXPO_PUBLIC_OTLP_TRACES_TOKEN",
+            "T3CODE_RELAY_CLIENT_OTLP_TRACES_URL",
+            "VITE_RELAY_OTLP_TRACES_URL",
+            "T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET",
+            "VITE_RELAY_OTLP_TRACES_DATASET",
+            "T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN",
+            "VITE_RELAY_OTLP_TRACES_TOKEN",
+          ].map((key) => [key, ""]),
+        )
+      : {}),
   };
 }
 

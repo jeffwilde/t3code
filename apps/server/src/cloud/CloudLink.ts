@@ -99,6 +99,7 @@ import * as ManagedLimits from "../policy/managedLimits.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { relayUrlConfig } from "./publicConfig.ts";
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 import {
   filterRelayResponse,
   relayRequestError,
@@ -1687,14 +1688,15 @@ const make = Effect.gen(function* () {
     Effect.catchIf(ServerSecretStore.isSecretStoreError, internalError("issue-credential")),
   );
 
-  if (!ManagedLimits.allowsConnect(managedPolicy)) {
+  if (fleetPrivateBuild || !ManagedLimits.allowsConnect(managedPolicy)) {
     // Reading state and unlinking stay available so clients can show and leave the old link.
-    yield* unlink().pipe(
-      Effect.tap(() => Effect.logInfo("T3 Connect is off by managed policy; unlinked.")),
-      Effect.catch((cause) =>
-        Effect.logWarning("Failed to unlink T3 Connect turned off by managed policy", { cause }),
-      ),
-    );
+    if (!fleetPrivateBuild)
+      yield* unlink().pipe(
+        Effect.tap(() => Effect.logInfo("T3 Connect is off by managed policy; unlinked.")),
+        Effect.catch((cause) =>
+          Effect.logWarning("Failed to unlink T3 Connect turned off by managed policy", { cause }),
+        ),
+      );
     const refused = Effect.fn("CloudLink.refusedByPolicy")(function* () {
       return yield* ManagedLimits.refuseConnect(managedPolicy);
     });
@@ -1716,7 +1718,9 @@ const make = Effect.gen(function* () {
       registerManagedTunnelRecovery: notLinked,
       recoverManagedTunnel: notStarted,
       startManagedTunnelIfOriginConfirmed: notStarted,
-      releaseManagedTunnelOnShutdown,
+      releaseManagedTunnelOnShutdown: fleetPrivateBuild
+        ? notStarted
+        : releaseManagedTunnelOnShutdown,
     });
   }
 

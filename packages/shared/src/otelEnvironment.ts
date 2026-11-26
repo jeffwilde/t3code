@@ -10,6 +10,10 @@ import type { OtlpEndpointSource } from "@t3tools/contracts";
 
 import { OtlpHeadersFromString, OtlpProtocol, type SignalExport } from "./observability.ts";
 
+declare const __T3CODE_FLEET_PRIVATE__: boolean | undefined;
+export const fleetPrivateBuild =
+  typeof __T3CODE_FLEET_PRIVATE__ !== "undefined" && __T3CODE_FLEET_PRIVATE__;
+
 type OtlpSignalName = "TRACES" | "METRICS" | "LOGS";
 
 export type OtelSignal = Data.TaggedEnum<{
@@ -282,7 +286,7 @@ export const load: Effect.Effect<OtelEnvironment> = Config.all({
   }),
 }).pipe(
   Effect.map(({ t3, spec, resource, generic, exporters, ...own }) => {
-    const disabled = t3.value ?? spec.value ?? false;
+    const disabled = fleetPrivateBuild || (t3.value ?? spec.value ?? false);
     const signals = disabled
       ? undefined
       : {
@@ -300,11 +304,12 @@ export const load: Effect.Effect<OtelEnvironment> = Config.all({
       ...Array.from(used, (setting) => setting.warning),
     ].filter((warning) => warning !== undefined);
     if (disabled) {
-      warnings.push(
-        t3.value
-          ? "T3CODE_OTEL_SDK_DISABLED is set, so no telemetry is exported, whatever configured it"
-          : "OTEL_SDK_DISABLED is set, so no telemetry is exported, whatever configured it; set T3CODE_OTEL_SDK_DISABLED=false to export anyway",
-      );
+      if (!fleetPrivateBuild)
+        warnings.push(
+          t3.value
+            ? "T3CODE_OTEL_SDK_DISABLED is set, so no telemetry is exported, whatever configured it"
+            : "OTEL_SDK_DISABLED is set, so no telemetry is exported, whatever configured it; set T3CODE_OTEL_SDK_DISABLED=false to export anyway",
+        );
     }
     return {
       disabled,
@@ -353,6 +358,7 @@ export const isRelayTracingEnabled = (env: Readonly<Record<string, string | unde
   }).pipe(
     Effect.map(
       ({ telemetry, t3, spec }) =>
+        !fleetPrivateBuild &&
         (telemetry.value ?? !isCiEnvironment(env)) &&
         !isDoNotTrackSet(env) &&
         !(t3.value ?? spec.value ?? false),

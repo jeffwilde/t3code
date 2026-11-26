@@ -1,6 +1,10 @@
 // T3 ingest retains events and forwards to PostHog; UUIDs deduplicate retries there.
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { isCiEnvironment, isDoNotTrackSet } from "@t3tools/shared/otelEnvironment";
+import {
+  fleetPrivateBuild,
+  isCiEnvironment,
+  isDoNotTrackSet,
+} from "@t3tools/shared/otelEnvironment";
 import type { ClientOs } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -134,7 +138,7 @@ export const make = Effect.gen(function* () {
     ManagedPolicy.deniedBy(yield* ManagedPolicy.ManagedPolicy, "telemetry") === undefined;
   // A cached PATH does not establish consent from the current login shell.
   const telemetryEnabled = Effect.suspend(() => {
-    if (!enabledAtStartup || !policyAllows || isDoNotTrackSet(hostEnvironment))
+    if (fleetPrivateBuild || !enabledAtStartup || !policyAllows || isDoNotTrackSet(hostEnvironment))
       return Effect.succeed(false);
     if (!awaitingShellConsent) return Effect.succeed(true);
     if (hostEnvironment.T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING === "1")
