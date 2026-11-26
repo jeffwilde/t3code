@@ -24,6 +24,7 @@ import { ChildProcessSpawner } from "effect/process";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { CLOUD_ENDPOINT_RUNTIME_CONFIG } from "./config.ts";
 import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 
 // cloudflared finds the edge through the SRV record `_v2-origintunneld._tcp.argotunnel.com`,
 // which names these two hosts on port 7844. QUIC and HTTP/2 both use that port.
@@ -252,7 +253,27 @@ export class ConnectReachability extends Context.Service<
   }
 >()("t3/cloud/ConnectReachability") {}
 
-const make = Effect.gen(function* () {
+export const fleetDisabledService = () =>
+  ConnectReachability.of({
+    check: DateTime.now.pipe(
+      Effect.map((now) =>
+        classifyReachability(
+          {
+            managedTunnelConfigured: false,
+            connector: null,
+            endpoint: null,
+            edgeReachable: null,
+            exitNode: null,
+          },
+          DateTime.formatIso(now),
+        ),
+      ),
+    ),
+    latest: Effect.succeedNone,
+  });
+
+export const make = Effect.gen(function* () {
+  if (fleetPrivateBuild) return fleetDisabledService();
   const runtime = yield* ManagedEndpointRuntime.CloudManagedEndpointRuntime;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const httpClient = yield* HttpClient.HttpClient;

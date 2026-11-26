@@ -54,6 +54,7 @@ import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.t
 import { isSnoozed } from "../orchestration-v2/ThreadSettlementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import { forkParked } from "../serverActivation.ts";
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 
 export class AgentAwarenessRelay extends Context.Service<
   AgentAwarenessRelay,
@@ -424,7 +425,16 @@ export function resolveAgentAwarenessRelayActiveThreadIds(input: {
 }
 
 /** @public */
+export const fleetDisabledService = () =>
+  AgentAwarenessRelay.of({
+    publishThread: Effect.fnUntraced(function* () {}),
+    drain: Effect.void,
+    requestCatchUp: Effect.fnUntraced(function* () {}),
+    start: Effect.fnUntraced(function* () {}),
+  });
+
 export const make = Effect.gen(function* () {
+  if (fleetPrivateBuild) return fleetDisabledService();
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const threads = yield* ThreadManagement.ThreadManagementService;
