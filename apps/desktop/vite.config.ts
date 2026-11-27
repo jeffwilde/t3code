@@ -7,6 +7,7 @@ import { Rolldown } from "vite-plus/pack";
 import { isDesktopRuntimeExternalDependency } from "../../scripts/lib/desktop-external-packages.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
 import { parseFleetTargets } from "../../packages/shared/src/fleetTopology.ts";
+import { parseFleetLiveplaneRef } from "../../packages/shared/src/fleetLiveplaneFeed.ts";
 import { parseFleetRoboConfig } from "../../packages/shared/src/fleetRoboConfig.ts";
 
 const repoEnv = loadRepoEnv();
@@ -20,6 +21,10 @@ const fleetRobo =
   process.env.T3CODE_FLEET_NO_CLOUD === "1" ? (process.env.T3CODE_FLEET_ROBO_JSON ?? "") : "";
 if (fleetRobo.trim() !== "" && parseFleetRoboConfig(fleetRobo) === null)
   throw new Error("Invalid non-secret fleet identity configuration");
+const fleetLiveplane =
+  process.env.T3CODE_FLEET_NO_CLOUD === "1" ? (process.env.T3CODE_FLEET_LIVEPLANE_JSON ?? "") : "";
+if (fleetLiveplane.trim() !== "" && parseFleetLiveplaneRef(fleetLiveplane) === null)
+  throw new Error("Invalid non-secret Liveplane fleet reference");
 const domTests = ["src/preview/PickPreload.test.ts"];
 
 // Install only bundle externals; the server bundle already carries its dependency tree.
@@ -36,6 +41,7 @@ const devElectronCommand =
 const publicConfigDefine = {
   __T3CODE_FLEET_TARGETS__: JSON.stringify(fleetTargets),
   __T3CODE_FLEET_ROBO__: JSON.stringify(fleetRobo),
+  __T3CODE_FLEET_LIVEPLANE__: JSON.stringify(fleetLiveplane),
   __T3CODE_FLEET_PRIVATE__: JSON.stringify(process.env.T3CODE_FLEET_NO_CLOUD === "1"),
   __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
     repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",

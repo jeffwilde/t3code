@@ -16,6 +16,35 @@ it("accepts an exact https issuer and audience", () => {
   });
 });
 
+it("accepts the deployed T3 desktop clients", () => {
+  expect(
+    parseFleetRoboConfig(
+      JSON.stringify({
+        issuer: "https://auth.robo.ai",
+        clientId: "t3-desktop",
+        audience: "https://t3.robo.ai",
+      }),
+    ),
+  ).toEqual({
+    issuer: "https://auth.robo.ai",
+    clientId: "t3-desktop",
+    audience: "https://t3.robo.ai",
+  });
+  expect(
+    parseFleetRoboConfig(
+      JSON.stringify({
+        issuer: "https://auth-test.robo.ai",
+        clientId: "t3-test-desktop",
+        audience: "https://t3-test.robo.ai",
+      }),
+    ),
+  ).toEqual({
+    issuer: "https://auth-test.robo.ai",
+    clientId: "t3-test-desktop",
+    audience: "https://t3-test.robo.ai",
+  });
+});
+
 it("treats an empty document as unconfigured", () => {
   expect(parseFleetRoboConfig("")).toBeNull();
   expect(parseFleetRoboConfig("  ")).toBeNull();

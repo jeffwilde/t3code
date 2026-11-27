@@ -451,6 +451,10 @@
       "types": "./src/fleetRoboConfig.ts",
       "import": "./src/fleetRoboConfig.ts"
     },
+    "./fleetLiveplaneFeed": {
+      "types": "./src/fleetLiveplaneFeed.ts",
+      "import": "./src/fleetLiveplaneFeed.ts"
+    },
     "./desktopAppControl": {
       "types": "./src/desktopAppControl.ts",
       "import": "./src/desktopAppControl.ts"
