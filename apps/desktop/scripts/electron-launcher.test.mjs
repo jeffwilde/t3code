@@ -8,6 +8,7 @@ import * as NodeVM from "node:vm";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  fleetKeychainLaunchArgs,
   makeDevelopmentEnvironmentScript,
   makeDevelopmentLauncherScript,
   resolveElectronBinaryPath,
@@ -52,6 +53,27 @@ describe("electron development launcher", () => {
       script,
       "exec '/repo/node_modules/electron/Electron' --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
     );
+    assert.notInclude(script, "--use-mock-keychain");
+  });
+
+  it("puts the mock keychain switch ahead of the app entry for a fleet launch", () => {
+    const script = makeDevelopmentLauncherScript({
+      electronBinaryPath: "/repo/node_modules/electron/Electron",
+      mainEntryPath: "/repo/apps/desktop/dist-electron/main.cjs",
+      desktopRoot: "/repo/apps/desktop",
+      environmentFilePath: "/repo/apps/desktop/.electron-runtime/dev-environment.sh",
+      isolateKeychain: true,
+    });
+
+    assert.include(
+      script,
+      "exec '/repo/node_modules/electron/Electron' --use-mock-keychain --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
+    );
+    assert.deepEqual(fleetKeychainLaunchArgs({ T3CODE_FLEET_NO_CLOUD: "1" }, "darwin"), [
+      "--use-mock-keychain",
+    ]);
+    assert.deepEqual(fleetKeychainLaunchArgs({ T3CODE_FLEET_NO_CLOUD: "1" }, "linux"), []);
+    assert.deepEqual(fleetKeychainLaunchArgs({}, "darwin"), []);
   });
 
   it("repairs Electron before loading the package entrypoint", () => {

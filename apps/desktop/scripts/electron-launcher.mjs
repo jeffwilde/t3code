@@ -127,16 +127,23 @@ export function makeDevelopmentEnvironmentScript(environment) {
   ].join("\n");
 }
 
+/** Darwin fleet launches must not open the login keychain shared with the vendor app. */
+export function fleetKeychainLaunchArgs(env = process.env, platform = hostPlatform) {
+  return env.T3CODE_FLEET_NO_CLOUD === "1" && platform === "darwin" ? ["--use-mock-keychain"] : [];
+}
+
 export function makeDevelopmentLauncherScript({
   electronBinaryPath,
   mainEntryPath,
   desktopRoot,
   environmentFilePath,
+  isolateKeychain = false,
 }) {
+  const keychainArg = isolateKeychain ? " --use-mock-keychain" : "";
   return [
     "#!/bin/sh",
     `if [ -f ${shellSingleQuote(environmentFilePath)} ]; then . ${shellSingleQuote(environmentFilePath)}; fi`,
-    `exec ${shellSingleQuote(electronBinaryPath)} --t3code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
+    `exec ${shellSingleQuote(electronBinaryPath)}${keychainArg} --t3code-dev-root=${shellSingleQuote(desktopRoot)} ${shellSingleQuote(mainEntryPath)} "$@"`,
     "",
   ].join("\n");
 }
@@ -161,6 +168,7 @@ export function writeDevelopmentLauncherScript(targetBinaryPath, electronBinaryP
     mainEntryPath: NodePath.join(desktopDir, "dist-electron", "main.cjs"),
     desktopRoot: desktopDir,
     environmentFilePath: developmentEnvironmentFilePath,
+    isolateKeychain: fleetKeychainLaunchArgs().length > 0,
   });
   if (
     NodeFS.existsSync(targetBinaryPath) &&
@@ -445,7 +453,7 @@ export function resolveElectronLaunchCommand(args = []) {
   const electronPath = resolveElectronPath();
   return {
     electronPath,
-    args: [...resolveLinuxSandboxArgs(electronPath), ...args],
+    args: [...fleetKeychainLaunchArgs(), ...resolveLinuxSandboxArgs(electronPath), ...args],
   };
 }
 
