@@ -19,8 +19,10 @@ it("builds a FeedService subscribe request with the bearer only in the header", 
   const bearer = "capability-token-value";
   const subscription = prepareFleetFeedSubscription({ ref, bearer, nowUnixMs: 1_800_000_000_000 });
   expect(subscription).toMatchObject({
-    service: "liveplane.feed.draft.FeedService",
+    service: "liveplane.feed.v1.FeedService",
     method: "Subscribe",
+    route: "/v1/feed",
+    subscribeHeader: "liveplane-subscribe-request",
     body: {
       stateSet: {
         liveplane: { governingAuthorityId: "robo", liveplaneId: "nixfig" },

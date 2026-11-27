@@ -18,8 +18,10 @@ export interface FleetLiveplaneRef {
 }
 
 export interface FleetFeedSubscription {
-  readonly service: "liveplane.feed.draft.FeedService";
+  readonly service: "liveplane.feed.v1.FeedService";
   readonly method: "Subscribe";
+  readonly route: "/v1/feed";
+  readonly subscribeHeader: "liveplane-subscribe-request";
   readonly body: {
     readonly stateSet: {
       readonly liveplane: {
@@ -142,8 +144,10 @@ export function prepareFleetFeedSubscription(input: {
   const serialized = JSON.stringify({ body, accessRequest });
   if (serialized.includes(input.bearer)) return null;
   return {
-    service: "liveplane.feed.draft.FeedService",
+    service: "liveplane.feed.v1.FeedService",
     method: "Subscribe",
+    route: "/v1/feed",
+    subscribeHeader: "liveplane-subscribe-request",
     body,
     authorization: `Bearer ${input.bearer}`,
     accessRequest,
