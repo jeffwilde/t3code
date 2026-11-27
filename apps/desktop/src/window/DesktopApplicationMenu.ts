@@ -8,7 +8,14 @@ import type { DesktopUpdateChannel } from "@t3tools/contracts";
 import * as Electron from "electron";
 import { msg } from "gt-i18n";
 
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
+
 import { makeComponentLogger } from "../app/DesktopObservability.ts";
+import {
+  electronFleetSecretStore,
+  fleetRoboConfigFromBuild,
+  startFleetRoboSignIn,
+} from "../app/fleetRoboSignIn.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
@@ -215,6 +222,25 @@ export const make = Effect.gen(function* () {
     const settingsClick = () => {
       runMenuEffect("open-settings", dispatchMenuAction("open-settings"));
     };
+    const fleetSignInClick = () => {
+      void electronFleetSecretStore(environment.stateDir)
+        .then((store) =>
+          startFleetRoboSignIn({
+            openBrowser: async (url) => {
+              await Electron.shell.openExternal(url);
+              return true;
+            },
+            store,
+          }),
+        )
+        .catch(() => {
+          Electron.dialog.showErrorBox("T3 Code", "Fleet sign-in failed. Try again.");
+        });
+    };
+    const fleetSignInItem = (): Electron.MenuItemConstructorOptions[] =>
+      fleetPrivateBuild && fleetRoboConfigFromBuild() !== null
+        ? [{ label: m(msg("Sign In to Fleet...")), click: fleetSignInClick }]
+        : [];
     const pasteAsTextClick = (
       _item: Electron.MenuItem,
       _window: Electron.BaseWindow | undefined,
@@ -253,6 +279,7 @@ export const make = Effect.gen(function* () {
             accelerator: "CmdOrCtrl+,",
             click: settingsClick,
           },
+          ...fleetSignInItem(),
           { type: "separator" },
           { role: "services", label: m(msg("Services", { $context: "macOS app menu item" })) },
           { type: "separator" },
@@ -280,6 +307,7 @@ export const make = Effect.gen(function* () {
                   accelerator: "CmdOrCtrl+,",
                   click: settingsClick,
                 },
+                ...fleetSignInItem(),
                 { type: "separator" as const },
               ]),
           {

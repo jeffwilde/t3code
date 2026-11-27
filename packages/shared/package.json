@@ -447,6 +447,10 @@
       "types": "./src/fleetTopology.ts",
       "import": "./src/fleetTopology.ts"
     },
+    "./fleetRoboConfig": {
+      "types": "./src/fleetRoboConfig.ts",
+      "import": "./src/fleetRoboConfig.ts"
+    },
     "./desktopAppControl": {
       "types": "./src/desktopAppControl.ts",
       "import": "./src/desktopAppControl.ts"

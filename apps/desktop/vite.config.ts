@@ -7,6 +7,7 @@ import { Rolldown } from "vite-plus/pack";
 import { isDesktopRuntimeExternalDependency } from "../../scripts/lib/desktop-external-packages.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
 import { parseFleetTargets } from "../../packages/shared/src/fleetTopology.ts";
+import { parseFleetRoboConfig } from "../../packages/shared/src/fleetRoboConfig.ts";
 
 const repoEnv = loadRepoEnv();
 const fleetTargets =
@@ -15,6 +16,10 @@ const fleetTargets =
     : "[]";
 if (parseFleetTargets(fleetTargets) === null)
   throw new Error("Invalid non-secret fleet target policy");
+const fleetRobo =
+  process.env.T3CODE_FLEET_NO_CLOUD === "1" ? (process.env.T3CODE_FLEET_ROBO_JSON ?? "") : "";
+if (fleetRobo.trim() !== "" && parseFleetRoboConfig(fleetRobo) === null)
+  throw new Error("Invalid non-secret fleet identity configuration");
 const domTests = ["src/preview/PickPreload.test.ts"];
 
 // Install only bundle externals; the server bundle already carries its dependency tree.
@@ -30,6 +35,7 @@ const devElectronCommand =
     : "exec node scripts/dev-electron.mjs";
 const publicConfigDefine = {
   __T3CODE_FLEET_TARGETS__: JSON.stringify(fleetTargets),
+  __T3CODE_FLEET_ROBO__: JSON.stringify(fleetRobo),
   __T3CODE_FLEET_PRIVATE__: JSON.stringify(process.env.T3CODE_FLEET_NO_CLOUD === "1"),
   __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
     repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",

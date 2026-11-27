@@ -31,6 +31,7 @@ import { DESKTOP_APP_ACTIVATION_REQUEST_CHANNEL } from "../ipc/channels.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import { DesktopAppActivationBroker } from "./DesktopAppActivationBroker.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
+import { currentFleetIdentity } from "./fleetRoboSession.ts";
 import { makeComponentLogger } from "./DesktopObservability.ts";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -172,8 +173,13 @@ export async function startDesktopAppControlServer(input: {
         finish(invalidResponse(parsed.requestId, "The fleet target is not authorized."));
         return;
       }
-      // Do not redeem credentials until an authenticated topology policy binds this target.
-      if (parsed.type === "fleet-pair" && parsed.pairingCode !== undefined) {
+      // A pairing code is redeemed only after this process completed user-initiated
+      // Robo PKCE. The socket request cannot supply that identity.
+      if (
+        parsed.type === "fleet-pair" &&
+        parsed.pairingCode !== undefined &&
+        currentFleetIdentity(Date.now()) === null
+      ) {
         finish(invalidResponse(parsed.requestId, "Fleet pairing authorization is not configured."));
         return;
       }
