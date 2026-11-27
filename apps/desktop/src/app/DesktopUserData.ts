@@ -1,3 +1,4 @@
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -36,12 +37,20 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
     readonly appDataDirectory: string;
     readonly isDevelopment: boolean;
     readonly platform: NodeJS.Platform;
+    readonly isolateCatalog?: boolean;
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    // Fleet and other non-vendor signatures do not share the Developer ID keychain
+    // identity, so they must not open or replace t3code-v2.
+    const isolateCatalog = input.isDevelopment
+      ? false
+      : input.isolateCatalog === true || fleetPrivateBuild;
     const names = input.isDevelopment
       ? { current: "t3code-dev", legacy: "T3 Code (Dev)" }
-      : { current: "t3code-v2", legacy: "T3 Code (Alpha)" };
+      : isolateCatalog
+        ? { current: "t3code-fleet-isolated", legacy: "t3code-fleet-isolated" }
+        : { current: "t3code-v2", legacy: "T3 Code (Alpha)" };
     const destinationPath = path.join(input.appDataDirectory, names.current);
     const legacyPath = path.join(input.appDataDirectory, names.legacy);
     const inspect = (resourcePath: string) =>
@@ -52,8 +61,8 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
             DesktopUserDataInitializationError.fromFileSystem(cause, "inspect", resourcePath),
           ),
         );
-    if (input.isDevelopment) {
-      return (yield* inspect(legacyPath)) ? legacyPath : destinationPath;
+    if (input.isDevelopment || isolateCatalog) {
+      return input.isDevelopment && (yield* inspect(legacyPath)) ? legacyPath : destinationPath;
     }
     // Chromium databases require their own profile for each running version.
     if (input.platform !== "win32") return destinationPath;
