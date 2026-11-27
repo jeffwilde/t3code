@@ -1,7 +1,9 @@
 /**
  * Read the fleet declaration through the existing Liveplane FeedService.
  * The bearer stays in the Authorization header. It is not a request field.
+ * A missing feed falls back to the compile-time pin. An unreadable feed does not.
  */
+import { parseFleetTargets } from "./fleetTopology.ts";
 
 declare const __T3CODE_FLEET_LIVEPLANE__: string | undefined;
 
@@ -146,4 +148,38 @@ export function prepareFleetFeedSubscription(input: {
     authorization: `Bearer ${input.bearer}`,
     accessRequest,
   };
+}
+
+export interface ResolvedFleetTargets {
+  readonly source: "pin" | "feed";
+  readonly targets: ReturnType<typeof parseFleetTargets>;
+}
+
+/**
+ * Prefer one exact-key feed value. Transport failure uses the pin.
+ * A present value that is not a target list authorizes nothing.
+ */
+export async function resolveFleetTargets(input: {
+  readonly pinnedJson: string;
+  readonly ref: FleetLiveplaneRef | null;
+  readonly bearer: string | null;
+  readonly nowUnixMs: number;
+  readonly readKey: (subscription: FleetFeedSubscription) => Promise<string | null>;
+}): Promise<ResolvedFleetTargets> {
+  const pinned = parseFleetTargets(input.pinnedJson);
+  if (input.ref === null || input.bearer === null) return { source: "pin", targets: pinned };
+  const subscription = prepareFleetFeedSubscription({
+    ref: input.ref,
+    bearer: input.bearer,
+    nowUnixMs: input.nowUnixMs,
+  });
+  if (subscription === null) return { source: "pin", targets: pinned };
+  let value: string | null;
+  try {
+    value = await input.readKey(subscription);
+  } catch {
+    return { source: "pin", targets: pinned };
+  }
+  if (value === null) return { source: "pin", targets: pinned };
+  return { source: "feed", targets: parseFleetTargets(value) };
 }

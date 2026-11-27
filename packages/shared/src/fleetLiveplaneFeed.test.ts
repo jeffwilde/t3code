@@ -4,6 +4,7 @@ import {
   fleetLiveplaneRefFromBuild,
   parseFleetLiveplaneRef,
   prepareFleetFeedSubscription,
+  resolveFleetTargets,
 } from "./fleetLiveplaneFeed.ts";
 
 const ref = {
@@ -44,6 +45,44 @@ it("accepts only a non-secret Liveplane reference", () => {
   expect(parseFleetLiveplaneRef(JSON.stringify(ref))).toEqual(ref);
   expect(parseFleetLiveplaneRef(JSON.stringify({ ...ref, bearer: "capability-token-value" }))).toBeNull();
   expect(parseFleetLiveplaneRef(JSON.stringify({ ...ref, audience: "https://user:secret@liveplane.example" }))).toBeNull();
+});
+
+it("uses a feed target list and keeps the pin when the feed is absent", async () => {
+  const pinned = JSON.stringify([{ environmentId: "pinned", origin: "https://pinned.example:8445" }]);
+  const fed = JSON.stringify([{ environmentId: "fed", origin: "https://fed.example:8445" }]);
+  const bearer = "capability-token-value";
+  const fromFeed = await resolveFleetTargets({
+    pinnedJson: pinned,
+    ref,
+    bearer,
+    nowUnixMs: 10,
+    readKey: async (subscription) => {
+      expect(subscription.authorization).toBe(`Bearer ${bearer}`);
+      expect(JSON.stringify(subscription.body)).not.toContain(bearer);
+      return fed;
+    },
+  });
+  expect(fromFeed).toEqual({
+    source: "feed",
+    targets: [{ environmentId: "fed", origin: "https://fed.example:8445" }],
+  });
+  const absent = await resolveFleetTargets({
+    pinnedJson: pinned,
+    ref,
+    bearer,
+    nowUnixMs: 10,
+    readKey: async () => null,
+  });
+  expect(absent.source).toBe("pin");
+  expect(absent.targets).toEqual([{ environmentId: "pinned", origin: "https://pinned.example:8445" }]);
+  const unreadable = await resolveFleetTargets({
+    pinnedJson: pinned,
+    ref,
+    bearer,
+    nowUnixMs: 10,
+    readKey: async () => "not-a-target-list",
+  });
+  expect(unreadable).toEqual({ source: "feed", targets: null });
 });
 
 it("rejects a bearer that would be copied into the state request", () => {

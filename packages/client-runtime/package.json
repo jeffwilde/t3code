@@ -678,6 +678,10 @@
     "./fleet/verify-robo": {
       "types": "./src/fleet/verifyRobo.d.mts",
       "default": "./src/fleet/verifyRobo.mjs"
+    },
+    "./fleet/pairing-minter": {
+      "types": "./src/fleet/fleetPairingMinter.ts",
+      "default": "./src/fleet/fleetPairingMinter.ts"
     }
   },
   "scripts": {
