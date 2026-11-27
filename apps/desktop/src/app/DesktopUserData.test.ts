@@ -42,6 +42,31 @@ it.effect.each(["t3code", "T3 Code (Alpha)"])(
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
+it.effect("keeps a development fleet catalog away from the dev and vendor profiles", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fleet-dev-home-" });
+    const vendor = path.join(directory, "t3code-v2");
+    const legacyDev = path.join(directory, "T3 Code (Dev)");
+    yield* fs.makeDirectory(vendor, { recursive: true });
+    yield* fs.makeDirectory(legacyDev, { recursive: true });
+    yield* fs.writeFileString(path.join(vendor, "connection-catalog.json"), "vendor-ciphertext");
+    const resolved = yield* resolveUserDataPath({
+      appDataDirectory: directory,
+      isDevelopment: true,
+      platform: "darwin",
+      isolateCatalog: true,
+    });
+    assert.equal(resolved, path.join(directory, "t3code-fleet-isolated"));
+    assert.equal(
+      yield* fs.readFileString(path.join(vendor, "connection-catalog.json")),
+      "vendor-ciphertext",
+    );
+    assert.isFalse(yield* fs.exists(path.join(resolved, "connection-catalog.json")));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
 it.effect("keeps an isolated catalog home away from the vendor profile", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

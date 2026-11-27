@@ -42,6 +42,7 @@ import {
   resolveMacFileExclusions,
   resolveMacWebAuthnEntitlements,
   resolveMacPasskeySigningConfiguration,
+  resolvePackagedDesktopIdentity,
   resolveMergedStageDependencies,
   resolveBuildOptions,
   stageWslRuntimeArchive,
@@ -1556,6 +1557,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ),
     ),
   );
+
+  it("keeps a fleet package off the vendor app id and URL scheme", () => {
+    assert.deepStrictEqual(resolvePackagedDesktopIdentity({}), {
+      appId: "com.t3tools.t3code",
+      productName: undefined,
+      protocolSchemes: ["t3code", "t3code-dev"],
+    });
+    assert.deepStrictEqual(resolvePackagedDesktopIdentity({ T3CODE_FLEET_NO_CLOUD: "1" }), {
+      appId: "ai.robo.t3code.fleet",
+      productName: "T3 Code Fleet",
+      protocolSchemes: ["t3code-fleet"],
+    });
+  });
 
   it("derives macOS passkey signing configuration from the Clerk publishable key", () => {
     const configuration = resolveMacPasskeySigningConfiguration({

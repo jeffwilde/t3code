@@ -16,6 +16,10 @@ NodeChildProcess.execFileSync(
 
 const childEnv = { ...process.env };
 delete childEnv.ELECTRON_RUN_AS_NODE;
+// The launcher signs before spawn. The running app does not need the signing key.
+delete childEnv.T3CODE_FLEET_CODESIGN_IDENTITY;
+delete childEnv.T3CODE_FLEET_CODESIGN_KEYCHAIN;
+delete childEnv.T3CODE_FLEET_CODESIGN_PASSWORD_FILE;
 
 const electronCommand = resolveElectronLaunchCommand(["dist-electron/main.cjs"]);
 const child = NodeChildProcess.spawn(electronCommand.electronPath, electronCommand.args, {

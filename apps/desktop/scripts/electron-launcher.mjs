@@ -10,15 +10,42 @@ const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 export const desktopDir = NodePath.resolve(__dirname, "..");
 const repoRoot = NodePath.resolve(desktopDir, "..", "..");
-const devBundleIdSuffix = NodePath.basename(repoRoot)
-  .toLowerCase()
-  .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Beta)";
-const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
-const LAUNCHER_VERSION = 20;
+const fleetEntitlementsPath = NodePath.join(__dirname, "fleet-entitlements.plist");
+
+/** Bundle identity for a launch. A fleet app never reuses the vendor id or the t3code:// claim. */
+export function resolveLauncherIdentity(
+  env = process.env,
+  repoBaseName = NodePath.basename(repoRoot),
+) {
+  const development = Boolean(env.VITE_DEV_SERVER_URL);
+  const fleet = env.T3CODE_FLEET_NO_CLOUD === "1";
+  const devBundleIdSuffix = repoBaseName.toLowerCase().replaceAll(/[^a-z0-9]+/g, "");
+  if (development) {
+    return {
+      displayName: "T3 Code (Dev)",
+      bundleId: `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`,
+      protocolSchemes: ["t3code-dev"],
+    };
+  }
+  if (fleet) {
+    return {
+      displayName: "T3 Code Fleet",
+      bundleId: "ai.robo.t3code.fleet",
+      protocolSchemes: ["t3code-fleet"],
+    };
+  }
+  return {
+    displayName: "T3 Code (Beta)",
+    bundleId: "com.t3tools.t3code",
+    protocolSchemes: ["t3code"],
+  };
+}
+
+const launcherIdentity = resolveLauncherIdentity();
+const APP_DISPLAY_NAME = launcherIdentity.displayName;
+const APP_BUNDLE_ID = launcherIdentity.bundleId;
+const APP_PROTOCOL_SCHEMES = launcherIdentity.protocolSchemes;
+const LAUNCHER_VERSION = 21;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
   "assets",
@@ -94,12 +121,126 @@ function runChecked(command, args) {
   throw new Error(`Failed to run ${command} ${args.join(" ")}: ${details}`.trim());
 }
 
-function resolveMacCodeSignArguments(appBundlePath) {
-  return ["--force", "--deep", "--sign", "-", "--timestamp=none", appBundlePath];
+function fleetAppSigning(env = process.env) {
+  return env.T3CODE_FLEET_NO_CLOUD === "1" && !env.VITE_DEV_SERVER_URL;
+}
+
+/** Ad-hoc signatures stay on the dev launcher. A fleet app must name a real identity. */
+export function resolveMacCodeSignArguments(appBundlePath, env = process.env) {
+  if (!fleetAppSigning(env)) {
+    return ["--force", "--deep", "--sign", "-", "--timestamp=none", appBundlePath];
+  }
+
+  const identity = env.T3CODE_FLEET_CODESIGN_IDENTITY?.trim() ?? "";
+  if (identity.length === 0 || identity === "-") {
+    throw new Error(
+      "Fleet desktop signing requires T3CODE_FLEET_CODESIGN_IDENTITY. Refusing an ad-hoc signature.",
+    );
+  }
+
+  const args = ["--force", "--sign", identity, "--timestamp=none", "--options", "runtime"];
+  const keychain = env.T3CODE_FLEET_CODESIGN_KEYCHAIN?.trim() ?? "";
+  if (keychain.length > 0) {
+    args.push("--keychain", keychain);
+  }
+  args.push("--entitlements", fleetEntitlementsPath, appBundlePath);
+  return args;
+}
+
+function listNestedMacBundles(root) {
+  const bundles = [];
+  const visit = (dir) => {
+    let entries = [];
+    try {
+      entries = NodeFS.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      if (!entry.isDirectory()) continue;
+      const full = NodePath.join(dir, entry.name);
+      const isBundle =
+        entry.name.endsWith(".app") ||
+        entry.name.endsWith(".framework") ||
+        entry.name.endsWith(".xpc");
+      if (isBundle) {
+        visit(full);
+        bundles.push(full);
+      } else {
+        visit(full);
+      }
+    }
+  };
+  visit(root);
+  return bundles;
+}
+
+function userKeychainSearchList() {
+  const listed = NodeChildProcess.spawnSync("security", ["list-keychains", "-d", "user"], {
+    encoding: "utf8",
+  });
+  if (listed.status !== 0) {
+    throw new Error(`Failed to read the user keychain search list: ${listed.stderr ?? ""}`.trim());
+  }
+  return [
+    ...new Set(
+      listed.stdout
+        .split("\n")
+        .map((line) => line.trim().replaceAll('"', ""))
+        .filter((line) => line.length > 0),
+    ),
+  ];
+}
+
+function unlockFleetSigningKeychain(env = process.env) {
+  const keychain = env.T3CODE_FLEET_CODESIGN_KEYCHAIN?.trim() ?? "";
+  const passwordFile = env.T3CODE_FLEET_CODESIGN_PASSWORD_FILE?.trim() ?? "";
+  if (keychain.length === 0 || passwordFile.length === 0) {
+    throw new Error(
+      "Fleet signing needs T3CODE_FLEET_CODESIGN_KEYCHAIN and T3CODE_FLEET_CODESIGN_PASSWORD_FILE.",
+    );
+  }
+  const password = NodeFS.readFileSync(passwordFile, "utf8").trim();
+  if (password.length === 0) {
+    throw new Error("Fleet signing password file is empty.");
+  }
+  // security takes the password as an argument. Do not log this command.
+  const unlocked = NodeChildProcess.spawnSync(
+    "security",
+    ["unlock-keychain", "-p", password, keychain],
+    { encoding: "utf8" },
+  );
+  if (unlocked.status !== 0) {
+    throw new Error("Failed to unlock the fleet signing keychain.");
+  }
 }
 
 function signMacLauncherBundle(appBundlePath) {
-  runChecked("codesign", resolveMacCodeSignArguments(appBundlePath));
+  if (!fleetAppSigning()) {
+    runChecked("codesign", resolveMacCodeSignArguments(appBundlePath));
+    return;
+  }
+  if (!NodeFS.existsSync(fleetEntitlementsPath)) {
+    throw new Error(`Fleet entitlements are missing at ${fleetEntitlementsPath}`);
+  }
+  unlockFleetSigningKeychain();
+  const keychain = process.env.T3CODE_FLEET_CODESIGN_KEYCHAIN?.trim() ?? "";
+  const original = userKeychainSearchList().filter((path) => path !== keychain);
+  const restored =
+    original.length > 0
+      ? original
+      : [NodePath.join(NodeOS.homedir(), "Library", "Keychains", "login.keychain-db")];
+  // codesign on this Mac ignores --keychain unless that keychain is also in the user search list.
+  runChecked("security", ["list-keychains", "-d", "user", "-s", keychain, ...restored]);
+  try {
+    for (const bundle of listNestedMacBundles(appBundlePath)) {
+      runChecked("codesign", resolveMacCodeSignArguments(bundle));
+    }
+    runChecked("codesign", resolveMacCodeSignArguments(appBundlePath));
+  } finally {
+    runChecked("security", ["list-keychains", "-d", "user", "-s", ...restored]);
+  }
 }
 
 function shellSingleQuote(value) {
@@ -127,9 +268,14 @@ export function makeDevelopmentEnvironmentScript(environment) {
   ].join("\n");
 }
 
-/** Darwin fleet launches must not open the login keychain shared with the vendor app. */
+/**
+ * Mock keychain is a synthetic test switch only. A real fleet launch uses OS safeStorage
+ * and must not pass this flag merely because cloud traffic is disabled.
+ */
 export function fleetKeychainLaunchArgs(env = process.env, platform = hostPlatform) {
-  return env.T3CODE_FLEET_NO_CLOUD === "1" && platform === "darwin" ? ["--use-mock-keychain"] : [];
+  return env.T3CODE_FLEET_SYNTHETIC_KEYCHAIN === "1" && platform === "darwin"
+    ? ["--use-mock-keychain"]
+    : [];
 }
 
 export function makeDevelopmentLauncherScript({

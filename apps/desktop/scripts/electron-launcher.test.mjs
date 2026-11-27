@@ -12,6 +12,8 @@ import {
   makeDevelopmentEnvironmentScript,
   makeDevelopmentLauncherScript,
   resolveElectronBinaryPath,
+  resolveLauncherIdentity,
+  resolveMacCodeSignArguments,
   resolveMacLauncherPaths,
   writeDevelopmentLauncherScript,
 } from "./electron-launcher.mjs";
@@ -56,7 +58,7 @@ describe("electron development launcher", () => {
     assert.notInclude(script, "--use-mock-keychain");
   });
 
-  it("puts the mock keychain switch ahead of the app entry for a fleet launch", () => {
+  it("keeps the mock keychain off a real fleet launch and ahead of the entry for a synthetic one", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",
       mainEntryPath: "/repo/apps/desktop/dist-electron/main.cjs",
@@ -69,11 +71,61 @@ describe("electron development launcher", () => {
       script,
       "exec '/repo/node_modules/electron/Electron' --use-mock-keychain --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
     );
-    assert.deepEqual(fleetKeychainLaunchArgs({ T3CODE_FLEET_NO_CLOUD: "1" }, "darwin"), [
-      "--use-mock-keychain",
-    ]);
-    assert.deepEqual(fleetKeychainLaunchArgs({ T3CODE_FLEET_NO_CLOUD: "1" }, "linux"), []);
+    assert.deepEqual(fleetKeychainLaunchArgs({ T3CODE_FLEET_NO_CLOUD: "1" }, "darwin"), []);
+    assert.deepEqual(
+      fleetKeychainLaunchArgs(
+        { T3CODE_FLEET_NO_CLOUD: "1", T3CODE_FLEET_SYNTHETIC_KEYCHAIN: "1" },
+        "darwin",
+      ),
+      ["--use-mock-keychain"],
+    );
+    assert.deepEqual(
+      fleetKeychainLaunchArgs({ T3CODE_FLEET_SYNTHETIC_KEYCHAIN: "1" }, "linux"),
+      [],
+    );
     assert.deepEqual(fleetKeychainLaunchArgs({}, "darwin"), []);
+  });
+
+  it("gives the fleet app its own bundle and refuses an ad-hoc signature", () => {
+    assert.deepEqual(resolveLauncherIdentity({ T3CODE_FLEET_NO_CLOUD: "1" }, "repo"), {
+      displayName: "T3 Code Fleet",
+      bundleId: "ai.robo.t3code.fleet",
+      protocolSchemes: ["t3code-fleet"],
+    });
+    assert.equal(resolveLauncherIdentity({}, "repo").bundleId, "com.t3tools.t3code");
+    assert.equal(
+      resolveLauncherIdentity({ VITE_DEV_SERVER_URL: "http://127.0.0.1:1" }, "repo").bundleId,
+      "com.t3tools.t3code.dev.repo",
+    );
+    assert.throws(
+      () => resolveMacCodeSignArguments("/tmp/T3 Code Fleet.app", { T3CODE_FLEET_NO_CLOUD: "1" }),
+      /Refusing an ad-hoc signature/,
+    );
+    assert.deepEqual(
+      resolveMacCodeSignArguments("/tmp/T3 Code Fleet.app", {
+        T3CODE_FLEET_NO_CLOUD: "1",
+        T3CODE_FLEET_CODESIGN_IDENTITY: "T3 Code Fleet Local Signing",
+        T3CODE_FLEET_CODESIGN_KEYCHAIN: "/tmp/fleet.keychain-db",
+      }).slice(0, 8),
+      [
+        "--force",
+        "--sign",
+        "T3 Code Fleet Local Signing",
+        "--timestamp=none",
+        "--options",
+        "runtime",
+        "--keychain",
+        "/tmp/fleet.keychain-db",
+      ],
+    );
+    assert.deepEqual(resolveMacCodeSignArguments("/tmp/T3 Code (Dev).app", {}), [
+      "--force",
+      "--deep",
+      "--sign",
+      "-",
+      "--timestamp=none",
+      "/tmp/T3 Code (Dev).app",
+    ]);
   });
 
   it("repairs Electron before loading the package entrypoint", () => {

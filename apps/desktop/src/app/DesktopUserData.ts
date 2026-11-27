@@ -41,15 +41,13 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    // Fleet and other non-vendor signatures do not share the Developer ID keychain
-    // identity, so they must not open or replace t3code-v2.
-    const isolateCatalog = input.isDevelopment
-      ? false
-      : input.isolateCatalog === true || fleetPrivateBuild;
-    const names = input.isDevelopment
-      ? { current: "t3code-dev", legacy: "T3 Code (Dev)" }
-      : isolateCatalog
-        ? { current: "t3code-fleet-isolated", legacy: "t3code-fleet-isolated" }
+    // A fleet profile never opens t3code-v2 or the legacy dev directory, including
+    // when a development server URL is set. Vendor ciphertext stays where it is.
+    const isolateCatalog = input.isolateCatalog === true || fleetPrivateBuild;
+    const names = isolateCatalog
+      ? { current: "t3code-fleet-isolated", legacy: "t3code-fleet-isolated" }
+      : input.isDevelopment
+        ? { current: "t3code-dev", legacy: "T3 Code (Dev)" }
         : { current: "t3code-v2", legacy: "T3 Code (Alpha)" };
     const destinationPath = path.join(input.appDataDirectory, names.current);
     const legacyPath = path.join(input.appDataDirectory, names.legacy);
@@ -61,8 +59,11 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
             DesktopUserDataInitializationError.fromFileSystem(cause, "inspect", resourcePath),
           ),
         );
-    if (input.isDevelopment || isolateCatalog) {
-      return input.isDevelopment && (yield* inspect(legacyPath)) ? legacyPath : destinationPath;
+    if (isolateCatalog) {
+      return destinationPath;
+    }
+    if (input.isDevelopment) {
+      return (yield* inspect(legacyPath)) ? legacyPath : destinationPath;
     }
     // Chromium databases require their own profile for each running version.
     if (input.platform !== "win32") return destinationPath;

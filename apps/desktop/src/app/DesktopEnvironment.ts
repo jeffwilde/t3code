@@ -17,6 +17,7 @@ import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import type { OtlpProtocol } from "@t3tools/shared/observability";
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -91,6 +92,9 @@ function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
 }): DesktopAppStageLabel {
+  if (fleetPrivateBuild) {
+    return "Fleet";
+  }
   if (input.isDevelopment) {
     return "Dev";
   }
@@ -106,7 +110,7 @@ export function resolveDesktopAppBranding(input: {
   return {
     baseName: APP_BASE_NAME,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: fleetPrivateBuild ? "T3 Code Fleet" : `${APP_BASE_NAME} (${stageLabel})`,
   };
 }
 
@@ -228,7 +232,11 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+      fleetPrivateBuild
+        ? "ai.robo.t3code.fleet"
+        : isDevelopment
+          ? "com.t3tools.t3code.dev"
+          : "com.t3tools.t3code",
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
     linuxApplicationsDir,

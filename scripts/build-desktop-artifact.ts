@@ -64,6 +64,30 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
 const DESKTOP_APP_ID = "com.t3tools.t3code";
+const FLEET_DESKTOP_APP_ID = "ai.robo.t3code.fleet";
+const FLEET_DESKTOP_PRODUCT_NAME = "T3 Code Fleet";
+
+/** A fleet package must not reuse the vendor app id or claim the vendor URL scheme. */
+export function resolvePackagedDesktopIdentity(
+  env: Readonly<Record<string, string | undefined>>,
+): {
+  readonly appId: string;
+  readonly productName: string | undefined;
+  readonly protocolSchemes: readonly string[];
+} {
+  if (env.T3CODE_FLEET_NO_CLOUD === "1") {
+    return {
+      appId: FLEET_DESKTOP_APP_ID,
+      productName: FLEET_DESKTOP_PRODUCT_NAME,
+      protocolSchemes: ["t3code-fleet"],
+    };
+  }
+  return {
+    appId: DESKTOP_APP_ID,
+    productName: undefined,
+    protocolSchemes: ["t3code", "t3code-dev"],
+  };
+}
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -1296,7 +1320,7 @@ export function resolveMacPasskeySigningConfiguration(
   }
 
   return {
-    appId: DESKTOP_APP_ID,
+    appId: resolvePackagedDesktopIdentity(env).appId,
     teamId,
     rpDomains: uniqueRpDomains,
     provisioningProfilePath,
@@ -2819,10 +2843,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
 ) {
+  const packagedIdentity = resolvePackagedDesktopIdentity(process.env);
   const buildConfig: Record<string, unknown> = {
     afterPack: (yield* Path.Path).join(yield* RepoRoot, "scripts/prepare-server-compile-cache.cjs"),
-    appId: DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
+    appId: packagedIdentity.appId,
+    productName: packagedIdentity.productName ?? resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -2907,8 +2932,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: packagedIdentity.productName ?? "T3 Code",
+          schemes: [...packagedIdentity.protocolSchemes],
         },
         {
           name: "Web site URL",
@@ -2953,21 +2978,24 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.afterPack = path.join(repoRoot, "scripts/linux-after-pack.ts");
     buildConfig.linux = {
       target: target === "AppImage" ? [target, "deb"] : [target],
-      executableName: "t3code",
+      executableName: packagedIdentity.appId === FLEET_DESKTOP_APP_ID ? "t3code-fleet" : "t3code",
       icon: "icons",
       category: "Development",
       synopsis: "Desktop GUI for coding agents",
       maintainer: "T3 Tools <hello@t3.codes>",
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: packagedIdentity.productName ?? "T3 Code",
+          schemes: [...packagedIdentity.protocolSchemes],
         },
       ],
       desktop: {
         entry: {
           // Match Electron's WM_CLASS from setDesktopName so docks use this launcher.
-          StartupWMClass: "com.t3tools.T3Code",
+          StartupWMClass:
+            packagedIdentity.appId === FLEET_DESKTOP_APP_ID
+              ? "ai.robo.T3Code.Fleet"
+              : "com.t3tools.T3Code",
         },
       },
     };

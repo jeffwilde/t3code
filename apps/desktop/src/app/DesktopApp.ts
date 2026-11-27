@@ -1,11 +1,14 @@
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import { fleetPrivateBuild } from "@t3tools/shared/otelEnvironment";
 import * as NetService from "@t3tools/shared/Net";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as ElectronApp from "../electron/ElectronApp.ts";
@@ -14,6 +17,12 @@ import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
+import {
+  ciphertextHidesPlaintext,
+  FLEET_STORAGE_CANARY_FILE,
+  FLEET_STORAGE_CANARY_PLAINTEXT,
+  mockStorageArgument,
+} from "./fleetStorageCanary.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopCliShim from "./DesktopCliShim.ts";
@@ -422,6 +431,63 @@ const startup = Effect.gen(function* () {
     Effect.catchCause((cause) => fatalStartupCause("whenReady", cause)),
   );
   yield* logStartupInfo("app ready");
+  const launchArguments = yield* HostProcess.Arguments;
+  const mockStorageFlag = mockStorageArgument(launchArguments);
+  if (fleetPrivateBuild && mockStorageFlag !== null) {
+    return yield* fatalStartupCause(
+      "fleet-storage",
+      Cause.fail(new Error(`Fleet desktop refused mock storage flag ${mockStorageFlag}.`)),
+    );
+  }
+  if ((yield* HostProcess.Environment).T3CODE_FLEET_STORAGE_CANARY === "1") {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    if (path.basename(userDataPath) !== "t3code-fleet-isolated") {
+      return yield* fatalStartupCause(
+        "fleet-storage",
+        Cause.fail(new Error("Fleet storage canary refused a directory other than t3code-fleet-isolated.")),
+      );
+    }
+    const encryptionAvailable = yield* safeStorage.isEncryptionAvailable.pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    if (!encryptionAvailable) {
+      return yield* fatalStartupCause(
+        "fleet-storage",
+        Cause.fail(new Error("Secure storage is unavailable.")),
+      );
+    }
+    const encrypted = yield* safeStorage.encryptString(FLEET_STORAGE_CANARY_PLAINTEXT).pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    const canaryPath = path.join(userDataPath, FLEET_STORAGE_CANARY_FILE);
+    yield* fileSystem.makeDirectory(userDataPath, { recursive: true }).pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    yield* fileSystem.writeFile(canaryPath, encrypted).pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    const stored = yield* fileSystem.readFile(canaryPath).pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    const decrypted = yield* safeStorage.decryptString(stored).pipe(
+      Effect.catchCause((cause) => fatalStartupCause("fleet-storage", cause)),
+    );
+    if (
+      decrypted !== FLEET_STORAGE_CANARY_PLAINTEXT ||
+      !ciphertextHidesPlaintext(stored, FLEET_STORAGE_CANARY_PLAINTEXT)
+    ) {
+      return yield* fatalStartupCause(
+        "fleet-storage",
+        Cause.fail(new Error("Fleet storage canary decrypt did not match.")),
+      );
+    }
+    yield* logStartupInfo("fleet storage canary ok", {
+      userDataPath,
+      canaryPath,
+      ciphertextBytes: stored.byteLength,
+    });
+  }
   if (environment.platform === "linux") {
     const selectedBackend = yield* safeStorage.selectedStorageBackend;
     yield* logStartupInfo("safe storage ready", {
