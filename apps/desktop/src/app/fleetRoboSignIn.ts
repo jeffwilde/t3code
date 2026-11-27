@@ -11,6 +11,8 @@ import { parseFleetRoboConfig, type FleetRoboConfig } from "@t3tools/shared/flee
 import {
   clearVerifiedFleetIdentity,
   currentFleetIdentity,
+  decodeFleetIdentity,
+  encodeFleetIdentity,
   rememberVerifiedFleetIdentity,
   type VerifiedFleetIdentity,
 } from "./fleetRoboSession.ts";
@@ -19,6 +21,7 @@ declare const __T3CODE_FLEET_ROBO__: string | undefined;
 
 const ACCESS_SECRET = "fleet-robo-access";
 const REFRESH_SECRET = "fleet-robo-refresh";
+const IDENTITY_SECRET = "fleet-robo-identity";
 
 export interface FleetSecretStore {
   put(name: string, value: string): Promise<void>;
@@ -46,6 +49,22 @@ export async function electronFleetSecretStore(stateDir: string): Promise<FleetS
       }
     },
   };
+}
+
+/** Restore a sealed subject after restart. A missing or unreadable record leaves sign-in empty. */
+export async function restoreFleetIdentity(input: {
+  readonly store: FleetSecretStore;
+  readonly nowMs: number;
+  readonly audience: string;
+}): Promise<VerifiedFleetIdentity | null> {
+  const raw = await input.store.get(IDENTITY_SECRET);
+  const identity = raw === null ? null : decodeFleetIdentity(raw, input.nowMs, input.audience);
+  if (identity === null) {
+    clearVerifiedFleetIdentity();
+    return null;
+  }
+  rememberVerifiedFleetIdentity(identity);
+  return identity;
 }
 
 export function fleetRoboConfigFromBuild(): FleetRoboConfig | null {
@@ -146,6 +165,7 @@ export async function startFleetRoboSignIn(input: {
     });
     await input.store.put(ACCESS_SECRET, tokens.accessToken);
     if (tokens.refreshToken !== null) await input.store.put(REFRESH_SECRET, tokens.refreshToken);
+    await input.store.put(IDENTITY_SECRET, encodeFleetIdentity(identity));
     rememberVerifiedFleetIdentity(identity);
     stored = true;
     return identity;

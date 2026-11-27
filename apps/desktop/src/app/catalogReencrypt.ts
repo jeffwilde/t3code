@@ -39,8 +39,14 @@ export function reencryptCatalog(input: {
   } catch {
     throw new CatalogReencryptError("destination-unreadable");
   }
-  if (roundTrip !== plaintext || destinationCiphertext === sourceCiphertext) {
+  if (roundTrip !== plaintext || sameBytes(destinationCiphertext, sourceCiphertext)) {
     throw new CatalogReencryptError("destination-unreadable");
   }
   return destinationCiphertext;
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return Buffer.from(left.buffer, left.byteOffset, left.byteLength).equals(
+    Buffer.from(right.buffer, right.byteOffset, right.byteLength),
+  );
 }

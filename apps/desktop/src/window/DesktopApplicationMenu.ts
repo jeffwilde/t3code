@@ -14,6 +14,7 @@ import { makeComponentLogger } from "../app/DesktopObservability.ts";
 import {
   electronFleetSecretStore,
   fleetRoboConfigFromBuild,
+  restoreFleetIdentity,
   startFleetRoboSignIn,
 } from "../app/fleetRoboSignIn.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
@@ -216,6 +217,17 @@ export const make = Effect.gen(function* () {
   };
 
   const configure = Effect.gen(function* () {
+    const fleetConfig = fleetRoboConfigFromBuild();
+    if (fleetPrivateBuild && fleetConfig !== null) {
+      const audience = fleetConfig.audience;
+      yield* Effect.tryPromise({
+        try: () =>
+          electronFleetSecretStore(environment.stateDir).then((store) =>
+            restoreFleetIdentity({ store, nowMs: Date.now(), audience }),
+          ),
+        catch: (cause) => cause,
+      }).pipe(Effect.ignore);
+    }
     const checkForUpdatesClick = () => {
       runMenuEffect("check-for-updates", handleCheckForUpdatesMenuClick);
     };

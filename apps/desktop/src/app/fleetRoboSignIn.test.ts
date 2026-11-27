@@ -6,7 +6,7 @@ import {
   signAccessToken,
 } from "../../../../packages/client-runtime/src/fleet/testJwtFixture.mjs";
 import { clearVerifiedFleetIdentity, currentFleetIdentity, rememberVerifiedFleetIdentity } from "./fleetRoboSession.ts";
-import { startFleetRoboSignIn, type FleetSecretStore } from "./fleetRoboSignIn.ts";
+import { restoreFleetIdentity, startFleetRoboSignIn, type FleetSecretStore } from "./fleetRoboSignIn.ts";
 
 const config = {
   issuer: "https://auth-test.robo.ai",
@@ -82,6 +82,8 @@ it("stores a verified Robo subject and keeps the authorization code out of the p
   expect(currentFleetIdentity(now)?.subject).toBe("robo:abcdefghijklmnop");
   expect(store.saved.has("fleet-robo-access")).toBe(true);
   expect(store.saved.has("fleet-robo-refresh")).toBe(true);
+  expect(store.saved.get("fleet-robo-identity")).toContain("robo:abcdefghijklmnop");
+  expect(store.saved.get("fleet-robo-identity")).not.toContain(accessToken);
 });
 
 it("keeps an existing verified identity when the browser does not open", async () => {
@@ -123,4 +125,83 @@ it("does not store a token when the callback does not match", async () => {
   ).rejects.toThrow("Sign-in expired. Try again.");
   expect(store.saved.size).toBe(0);
   expect(currentFleetIdentity(0)).toBeNull();
+});
+
+it("restores a sealed subject for the same audience without reading the access token", async () => {
+  const now = 1_800_000_000_000;
+  const store = memoryStore();
+  const reads: string[] = [];
+  const wrapped: FleetSecretStore = {
+    put: (name, value) => store.put(name, value),
+    get: async (name) => {
+      reads.push(name);
+      return store.get(name);
+    },
+  };
+  await store.put(
+    "fleet-robo-identity",
+    JSON.stringify({
+      v: 1,
+      subject: "robo:abcdefghijklmnop",
+      audience: config.audience,
+      expiresAtMs: now + 60_000,
+    }),
+  );
+  await store.put("fleet-robo-access", "access-token");
+  clearVerifiedFleetIdentity();
+  const restored = await restoreFleetIdentity({
+    store: wrapped,
+    nowMs: now,
+    audience: config.audience,
+  });
+  expect(restored?.subject).toBe("robo:abcdefghijklmnop");
+  expect(currentFleetIdentity(now)?.audience).toBe(config.audience);
+  expect(reads).toEqual(["fleet-robo-identity"]);
+});
+
+it("drops an expired, mismatched, or unreadable sealed subject", async () => {
+  const now = 1_800_000_000_000;
+  rememberVerifiedFleetIdentity({
+    subject: "robo:alreadyverified01",
+    audience: config.audience,
+    expiresAtMs: now + 60_000,
+  });
+  const store = memoryStore();
+  await store.put(
+    "fleet-robo-identity",
+    JSON.stringify({
+      v: 1,
+      subject: "robo:abcdefghijklmnop",
+      audience: config.audience,
+      expiresAtMs: now,
+    }),
+  );
+  expect(
+    await restoreFleetIdentity({ store, nowMs: now, audience: config.audience }),
+  ).toBeNull();
+  expect(currentFleetIdentity(now)).toBeNull();
+
+  rememberVerifiedFleetIdentity({
+    subject: "robo:alreadyverified01",
+    audience: config.audience,
+    expiresAtMs: now + 60_000,
+  });
+  await store.put(
+    "fleet-robo-identity",
+    JSON.stringify({
+      v: 1,
+      subject: "robo:abcdefghijklmnop",
+      audience: "https://t3.robo.ai",
+      expiresAtMs: now + 60_000,
+    }),
+  );
+  expect(
+    await restoreFleetIdentity({ store, nowMs: now, audience: config.audience }),
+  ).toBeNull();
+  expect(currentFleetIdentity(now)).toBeNull();
+
+  await store.put("fleet-robo-identity", "not-a-sealed-subject");
+  expect(
+    await restoreFleetIdentity({ store, nowMs: now, audience: config.audience }),
+  ).toBeNull();
 });

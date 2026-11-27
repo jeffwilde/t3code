@@ -58,6 +58,26 @@ describe("catalog re-encryption", () => {
     assert.equal(source.decrypt(sourceCiphertext), plaintext);
   });
 
+  it("rejects a destination write that repeats the source bytes", () => {
+    const source = identity("vendor");
+    const plaintext = "catalog";
+    const sourceCiphertext = source.encrypt(plaintext);
+    const destination: CatalogCipherIdentity = {
+      encrypt: () => sourceCiphertext.slice(),
+      decrypt: () => plaintext,
+    };
+
+    let caught: unknown;
+    try {
+      reencryptCatalog({ source, destination, sourceCiphertext });
+    } catch (error) {
+      caught = error;
+    }
+    assert.instanceOf(caught, CatalogReencryptError);
+    assert.equal(caught instanceof CatalogReencryptError && caught.reason, "destination-unreadable");
+    assert.equal(source.decrypt(sourceCiphertext), plaintext);
+  });
+
   it("refuses a source ciphertext the current identity cannot read", () => {
     let caught: unknown;
     try {
