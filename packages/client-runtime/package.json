@@ -670,6 +670,14 @@
     "./pull-request-references": {
       "types": "./src/pullRequestReferences.ts",
       "default": "./src/pullRequestReferences.ts"
+    },
+    "./fleet/robo-desktop-auth": {
+      "types": "./src/fleet/roboDesktopAuth.ts",
+      "default": "./src/fleet/roboDesktopAuth.ts"
+    },
+    "./fleet/verify-robo": {
+      "types": "./src/fleet/verifyRobo.d.mts",
+      "default": "./src/fleet/verifyRobo.mjs"
     }
   },
   "scripts": {
